@@ -8,7 +8,7 @@
  * top, so saving feels instant and works with no signal.
  */
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const STARTER_CATEGORIES = ['Housing', 'Utilities', 'Groceries', 'Dining out', 'Gas', 'Insurance', 'Fun', 'Other'];
 const BATCH_SIZE = 50;
 const REQUEST_TIMEOUT_MS = 30000;
@@ -546,9 +546,14 @@ function displayAmount(text) {
   return decimals === undefined ? `$${grouped}` : `$${grouped}.${decimals}`;
 }
 
-function canSaveAdd() {
-  const { kind, amount, category } = S.add;
-  return toCents(amount || 0) > 0 && (kind === 'income' || !!category);
+/** What's still needed before this entry can be saved, or null if it's ready. */
+function missingForSave() {
+  const { kind, amount, category, note } = S.add;
+  if (toCents(amount || 0) <= 0) return 'Enter an amount';
+  if (kind === 'income') return null;
+  if (!category) return 'Choose a category';
+  if (!note.trim()) return 'Add a description';
+  return null;
 }
 
 /** Where a category stands, or null if that month has no budget for it. */
@@ -576,7 +581,10 @@ function updateAdd() {
   display.classList.toggle('empty', !amount);
   byId('hint').textContent = addHint();
   byId('date-label').textContent = date ? dayShort(date) : 'Today';
-  byId('save').disabled = !canSaveAdd();
+  const missing = missingForSave();
+  const save = byId('save');
+  save.disabled = !!missing;
+  save.textContent = missing || (S.add.kind === 'income' ? 'Save income' : 'Save purchase');
   document.querySelectorAll('.chip').forEach((chip) => {
     const on = chip.dataset.cat === category;
     chip.classList.toggle('on', on);
@@ -605,7 +613,7 @@ function pressKey(key) {
 }
 
 function saveAdd() {
-  if (!canSaveAdd()) return;
+  if (missingForSave()) return;
   document.activeElement?.blur();
   const { kind, amount, category, note, date } = S.add;
   const cents = toCents(amount);
@@ -687,12 +695,16 @@ function viewAdd() {
       h('input', {
         class: 'input note',
         type: 'text',
-        placeholder: isIncome ? 'Source (optional)' : 'Note (optional)',
-        'aria-label': 'Note',
+        placeholder: isIncome ? 'Source (optional)' : 'Description',
+        'aria-label': isIncome ? 'Source' : 'Description',
+        required: !isIncome,
         maxLength: 200,
         enterkeyhint: 'done',
         value: add.note,
-        oninput: (event) => { add.note = event.target.value; },
+        oninput: (event) => {
+          add.note = event.target.value;
+          updateAdd();
+        },
         onkeydown: (event) => { if (event.key === 'Enter') event.target.blur(); },
       })),
     middle,
@@ -702,7 +714,7 @@ function viewAdd() {
         icon: key === 'back' ? ICONS.backspace : null,
         onclick: () => pressKey(key),
       }, key === 'back' ? null : key))),
-    h('button', { class: 'primary', id: 'save', onclick: saveAdd }, isIncome ? 'Save income' : 'Save purchase'));
+    h('button', { class: 'primary', id: 'save', onclick: saveAdd }));
 
   // updateAdd finds elements by id, so run it once this screen is on the page.
   queueMicrotask(updateAdd);
@@ -852,6 +864,7 @@ function openTxnEditor(kind, row) {
       const value = parseMoney(amount.value);
       if (!Number.isFinite(value) || value === 0) { error.textContent = 'Enter an amount.'; return; }
       if (!date.value) { error.textContent = 'Choose a date.'; return; }
+      if (!isIncome && !note.value.trim()) { error.textContent = 'Enter a description.'; return; }
       const updated = { ...row, amount: value, date: date.value, note: note.value.trim() };
       if (!isIncome) updated.category = category.value;
       close();
@@ -867,7 +880,7 @@ function openTxnEditor(kind, row) {
     return h('div', {},
       h('div', { class: 'field-pair' }, field('Amount', amount), field('Date', date)),
       !isIncome && field('Category', category),
-      field(isIncome ? 'Source' : 'Note', note),
+      field(isIncome ? 'Source' : 'Description', note),
       error,
       h('button', { class: 'primary', onclick: save }, 'Save'),
       h('button', { class: 'danger-btn', onclick: remove }, 'Delete'));
