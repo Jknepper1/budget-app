@@ -1,0 +1,10 @@
+{
+  "name": "budget-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A simple shared monthly budget for two phones, backed by a Google Sheet.",
+  "scripts": {
+    "dev": "node dev/server.js",
+    "test": "node --test dev/backend.test.js"
+  }
+}
